@@ -15,6 +15,17 @@ class CoinDash extends Phaser.Scene {
     this.background = this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, 0x24334b, 0.45);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
+    // Minimap in the bottom-right corner, one cell per map; enterMap() lights the current one.
+    const cell = 14, gap = 4;
+    this.minimap = [];
+    for (let row = 0; row < c.mapRows; row++) {
+      for (let col = 0; col < c.mapCols; col++) {
+        const x = c.width - 12 - cell / 2 - (c.mapCols - 1 - col) * (cell + gap);
+        const y = c.height - 12 - cell / 2 - (c.mapRows - 1 - row) * (cell + gap);
+        this.minimap.push(this.add.rectangle(x, y, cell, cell)
+          .setStrokeStyle(1, 0xffffff, 0.5).setDepth(10).setData({ col, row }));
+      }
+    }
     this.player = this.add.circle(c.width / 2, c.height / 2, 12, c.colors.player);
     this.physics.add.existing(this.player);
     this.coins = this.physics.add.group();
@@ -63,6 +74,10 @@ class CoinDash extends Phaser.Scene {
     const base = Phaser.Display.Color.IntegerToColor(c.colors.background);
     this.background.setFillStyle(Phaser.Display.Color.GetColor(
       base.red + this.mapCol * 10, base.green + this.mapRow * 10, base.blue));
+    for (const square of this.minimap) {
+      const here = square.getData('col') === this.mapCol && square.getData('row') === this.mapRow;
+      square.setFillStyle(here ? c.colors.player : 0x24334b, here ? 1 : 0.6);
+    }
     for (const spot of this.currentMap().coins) {
       const coin = this.add.circle(spot.x, spot.y, 9, c.colors.coin).setData('spot', spot);
       this.coins.add(coin);
