@@ -21,7 +21,7 @@ class CoinDash extends Phaser.Scene {
     this.finished = false;
     this.paused = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
-    // Remaining coin positions per map, keyed "col,row"; filled on the first visit.
+    // Obstacle layout and remaining coin positions per map, keyed "col,row"; filled on the first visit.
     this.maps = {};
     this.mapCol = Math.floor(c.mapCols / 2);
     this.mapRow = Math.floor(c.mapRows / 2);
@@ -44,6 +44,9 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.existing(this.player);
     this.coins = this.physics.add.group();
     this.drones = this.physics.add.group();
+    this.obstacles = this.physics.add.staticGroup();
+    this.physics.add.collider(this.player, this.obstacles);
+    this.physics.add.collider(this.drones, this.obstacles);
     this.physics.add.overlap(this.player, this.coins, (player, coin) => {
       if (this.finished) return;
       this.score++;
@@ -92,27 +95,61 @@ class CoinDash extends Phaser.Scene {
 
   currentMap() {
     const key = `${this.mapCol},${this.mapRow}`;
-    if (!this.maps[key]) this.maps[key] = { coins: this.randomSpots(COIN_DASH.coinsPerMap, 60) };
+    if (!this.maps[key]) {
+      const map = { obstacles: this.randomObstacles() };
+      this.maps[key] = map;
+      map.coins = this.randomSpots(COIN_DASH.coinsPerMap, 60, 16);
+    }
     return this.maps[key];
   }
 
-  // Random points inside the play area, at least minDistance away from the player.
-  randomSpots(count, minDistance) {
+  // Random walls {x, y, w, h} (top-left corner) away from the edges, the HUD, the minimap and
+  // the player. Walls keep a wide gap between each other, so every open spot stays reachable.
+  randomObstacles() {
     const c = COIN_DASH;
+    const m = c.obstacleEdgeMargin, gap = 48;
+    const centre = this.mapCol === Math.floor(c.mapCols / 2) && this.mapRow === Math.floor(c.mapRows / 2);
+    const count = centre ? c.centreObstacles : Phaser.Math.Between(...c.obstaclesPerMap);
+    const walls = [];
+    for (let tries = 0; walls.length < count && tries < 200; tries++) {
+      const long = Phaser.Math.Between(...c.obstacleLength);
+      const thick = Phaser.Math.Between(...c.obstacleThickness);
+      const [w, h] = Math.random() < 0.5 ? [long, thick] : [thick, long];
+      const x = Phaser.Math.Between(m, c.width - m - w);
+      const y = Phaser.Math.Between(44 + m, c.height - m - h);
+      const rect = new Phaser.Geom.Rectangle(x, y, w, h);
+      const nearMinimap = x + w > c.width - 90 && y + h > c.height - 90;
+      const nearPlayer = Phaser.Geom.Intersects.CircleToRectangle(
+        new Phaser.Geom.Circle(this.player.x, this.player.y, 60), rect);
+      const nearWall = walls.some((o) => Phaser.Geom.Intersects.RectangleToRectangle(
+        new Phaser.Geom.Rectangle(o.x - gap, o.y - gap, o.w + gap * 2, o.h + gap * 2), rect));
+      if (!nearMinimap && !nearPlayer && !nearWall) walls.push({ x, y, w, h });
+    }
+    return walls;
+  }
+
+  // Random points inside the play area, at least minDistance away from the player
+  // and at least clearance away from the current map's obstacles.
+  randomSpots(count, minDistance, clearance) {
+    const c = COIN_DASH;
+    const walls = this.currentMap().obstacles;
     const spots = [];
     while (spots.length < count) {
       const x = Phaser.Math.Between(25, c.width - 25);
       const y = Phaser.Math.Between(70, c.height - 25);
-      if (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) >= minDistance) {
+      const blocked = walls.some((o) => Phaser.Geom.Intersects.CircleToRectangle(
+        new Phaser.Geom.Circle(x, y, clearance), new Phaser.Geom.Rectangle(o.x, o.y, o.w, o.h)));
+      if (!blocked && Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) >= minDistance) {
         spots.push({ x, y });
       }
     }
     return spots;
   }
 
-  // Replace the previous map's coins and drones with the current map's.
+  // Replace the previous map's obstacles, coins and drones with the current map's.
   enterMap() {
     const c = COIN_DASH;
+    this.obstacles.clear(true, true);
     this.coins.clear(true, true);
     this.drones.clear(true, true);
     const base = Phaser.Display.Color.IntegerToColor(c.colors.background);
@@ -122,20 +159,24 @@ class CoinDash extends Phaser.Scene {
       const here = square.getData('col') === this.mapCol && square.getData('row') === this.mapRow;
       square.setFillStyle(here ? c.colors.player : 0x24334b, here ? 1 : 0.6);
     }
+    for (const o of this.currentMap().obstacles) {
+      this.obstacles.add(this.add.rectangle(o.x, o.y, o.w, o.h, c.colors.obstacle)
+        .setOrigin(0).setStrokeStyle(2, 0x56698a));
+    }
     for (const spot of this.currentMap().coins) {
       const coin = this.add.circle(spot.x, spot.y, 9, c.colors.coin).setData('spot', spot);
       this.coins.add(coin);
       coin.body.setCircle(9);
     }
-    // Enemies spawn away from the entry point, and touching one is harmless for a moment.
-    // Maps further from the centre get more and harder enemies.
+    // Enemies spawn away from the entry point and the walls, and touching one is harmless for a
+    // moment. Maps further from the centre get more and harder enemies.
     this.safeUntil = this.time.now + c.mapEntryGraceMs;
     const distance = Math.abs(this.mapCol - Math.floor(c.mapCols / 2))
       + Math.abs(this.mapRow - Math.floor(c.mapRows / 2));
     const counts = c.enemiesByDistance[Math.min(distance, c.enemiesByDistance.length - 1)];
     const kinds = [...Array(counts.drones).fill('drone'), ...Array(counts.chasers).fill('chaser'),
       ...Array(counts.dashers).fill('dasher')];
-    this.randomSpots(kinds.length, 200).forEach((spot, i) => this.spawnEnemy(kinds[i], spot));
+    this.randomSpots(kinds.length, 200, 20).forEach((spot, i) => this.spawnEnemy(kinds[i], spot));
   }
 
   // Drones are circles bouncing at a slightly varied speed; chasers are squares, dashers triangles.
