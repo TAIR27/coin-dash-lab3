@@ -7,6 +7,11 @@ press P to pause or resume and R to restart. Your best score is saved in the bro
 steer toward you, and purple triangle dashers fade while winding up and then lunge at you. The centre map
 has only drones; edge maps add a chaser, and corner maps add more chasers and a dasher. This is deliberately small so you can add features during the lab.
 
+Collecting a coin plays a short chime synthesized locally with the Web Audio API.
+Audio starts after a key press or pointer interaction. Use **Mute sound / Unmute sound**
+below the game to toggle audio; the choice lasts across restarts until the page reloads.
+Browsers without Web Audio support can still play silently. No audio files are downloaded.
+
 **Play it here:** https://www.avivz.net/coin-dash/
 
 ## Run it locally
@@ -42,6 +47,7 @@ laptops' JSON files together and save the combined HTML. Use the same time windo
 - `style.css`: page appearance.
 - `settings.js`: round duration, speeds, colours, dimensions, map grid size, enemies per map and obstacle counts/sizes.
 - `game.js`: scene, input, collisions, score and end-of-round behaviour.
+- `audio.js`: gesture-activated coin chime and mute control.
 - `vendor/phaser-3.90.0.min.js`: the pinned Phaser runtime, byte for byte the file published at
   `https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js`; `vendor/LICENSE.phaser.txt` is its MIT licence.
 

@@ -1,4 +1,4 @@
-/* global Phaser, COIN_DASH */
+/* global Phaser, COIN_DASH, COIN_DASH_AUDIO */
 // The best score lives in localStorage; storage may be unavailable, so failures fall back to 0.
 const HIGH_SCORE_KEY = 'coinDash.highScore';
 function loadHighScore() {
@@ -50,6 +50,7 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coins, (player, coin) => {
       if (this.finished) return;
       this.score++;
+      COIN_DASH_AUDIO.playCoin();
       if (this.score > this.highScore) {
         this.highScore = this.score;
         saveHighScore(this.highScore);
