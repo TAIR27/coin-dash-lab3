@@ -5,6 +5,11 @@ walk off a screen edge to enter a neighbouring map (a 3x3 grid, each with its ow
 press P to pause or resume and R to restart. Your best score is saved in the browser
 (localStorage) and shown in the HUD. This is deliberately small so you can add features during the lab.
 
+Collecting a coin plays a short chime synthesized locally with the Web Audio API.
+Audio starts after a key press or pointer interaction. Use **Mute sound / Unmute sound**
+below the game to toggle audio; the choice lasts across restarts until the page reloads.
+Browsers without Web Audio support can still play silently. No audio files are downloaded.
+
 **Play it here:** https://www.avivz.net/coin-dash/
 
 ## Run it locally
@@ -40,6 +45,7 @@ laptops' JSON files together and save the combined HTML. Use the same time windo
 - `style.css`: page appearance.
 - `settings.js`: round duration, speeds, colours, dimensions and map grid size.
 - `game.js`: scene, input, collisions, score and end-of-round behaviour.
+- `audio.js`: gesture-activated coin chime and mute control.
 - `vendor/phaser-3.90.0.min.js`: the pinned Phaser runtime, byte for byte the file published at
   `https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js`; `vendor/LICENSE.phaser.txt` is its MIT licence.
 
