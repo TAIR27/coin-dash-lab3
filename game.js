@@ -55,8 +55,9 @@ class CoinDash extends Phaser.Scene {
       spots.splice(spots.indexOf(coin.getData('spot')), 1);
       coin.destroy();
     });
-    this.physics.add.overlap(this.player, this.drones, () => {
-      if (this.time.now >= this.safeUntil) this.finish('A drone caught you!');
+    this.physics.add.overlap(this.player, this.drones, (player, enemy) => {
+      if (this.time.now < this.safeUntil) return;
+      this.finish(`A ${enemy.getData('kind')} caught you!`);
     });
     this.enterMap();
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -77,8 +78,13 @@ class CoinDash extends Phaser.Scene {
       ).setOrigin(0.5);
     } else {
       // Push the deadline and map-entry grace back by the time spent paused so neither jumps.
-      this.deadline += this.time.now - this.pausedAt;
-      this.safeUntil += this.time.now - this.pausedAt;
+      // Dasher phase timers are shifted the same way.
+      const pausedFor = this.time.now - this.pausedAt;
+      this.deadline += pausedFor;
+      this.safeUntil += pausedFor;
+      for (const enemy of this.drones.getChildren()) {
+        if (enemy.getData('kind') === 'dasher') enemy.data.values.phaseUntil += pausedFor;
+      }
       this.physics.resume();
       this.pauseText.destroy();
     }
@@ -121,15 +127,64 @@ class CoinDash extends Phaser.Scene {
       this.coins.add(coin);
       coin.body.setCircle(9);
     }
-    // Drones spawn away from the entry point, and touching one is harmless for a moment.
-    for (const spot of this.randomSpots(c.droneCount, 200)) {
-      const drone = this.add.circle(spot.x, spot.y, 13, c.colors.drone);
-      this.drones.add(drone);
-      drone.body.setCollideWorldBounds(true).setBounce(1, 1);
-      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      drone.body.setVelocity(Math.cos(angle) * c.droneSpeed, Math.sin(angle) * c.droneSpeed);
-    }
+    // Enemies spawn away from the entry point, and touching one is harmless for a moment.
+    // Maps further from the centre get more and harder enemies.
     this.safeUntil = this.time.now + c.mapEntryGraceMs;
+    const distance = Math.abs(this.mapCol - Math.floor(c.mapCols / 2))
+      + Math.abs(this.mapRow - Math.floor(c.mapRows / 2));
+    const counts = c.enemiesByDistance[Math.min(distance, c.enemiesByDistance.length - 1)];
+    const kinds = [...Array(counts.drones).fill('drone'), ...Array(counts.chasers).fill('chaser'),
+      ...Array(counts.dashers).fill('dasher')];
+    this.randomSpots(kinds.length, 200).forEach((spot, i) => this.spawnEnemy(kinds[i], spot));
+  }
+
+  // Drones are circles bouncing at a slightly varied speed; chasers are squares, dashers triangles.
+  spawnEnemy(kind, spot) {
+    const c = COIN_DASH;
+    const enemy = kind === 'chaser' ? this.add.rectangle(spot.x, spot.y, 24, 24, c.colors.chaser)
+      : kind === 'dasher' ? this.add.triangle(spot.x, spot.y, 0, 26, 13, 0, 26, 26, c.colors.dasher)
+      : this.add.circle(spot.x, spot.y, 13, c.colors.drone);
+    enemy.setData('kind', kind);
+    this.drones.add(enemy);
+    enemy.body.setCollideWorldBounds(true).setBounce(1, 1);
+    // Hit areas are circles inside the square and triangle so their corners don't feel unfair.
+    if (kind === 'chaser') enemy.body.setCircle(12);
+    if (kind === 'dasher') enemy.body.setCircle(11, 2, 3);
+    const jitter = Phaser.Math.Between(-c.droneSpeedJitter, c.droneSpeedJitter);
+    const speed = { drone: c.droneSpeed + jitter, chaser: 0, dasher: c.dasher.driftSpeed }[kind];
+    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    enemy.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    // Dashers drift, then wind up (shown by fading) and lunge at the player;
+    // the first wind-up waits until well after the map-entry grace period.
+    if (kind === 'dasher') {
+      enemy.setData({ phase: 'drift', phaseUntil: this.safeUntil + c.dasher.intervalMs / 2 });
+    }
+  }
+
+  // Steer chasers toward the player and step dashers through drift, wind-up and dash.
+  moveEnemies() {
+    const c = COIN_DASH, now = this.time.now;
+    for (const enemy of this.drones.getChildren()) {
+      const kind = enemy.getData('kind');
+      const toPlayer = new Phaser.Math.Vector2(this.player.x - enemy.x, this.player.y - enemy.y)
+        .normalize();
+      if (kind === 'chaser') {
+        const speed = now < this.safeUntil ? 0 : c.chaserSpeed;
+        enemy.body.setVelocity(toPlayer.x * speed, toPlayer.y * speed);
+      } else if (kind === 'dasher' && now >= enemy.getData('phaseUntil')) {
+        const phase = enemy.getData('phase');
+        if (phase === 'drift') {
+          enemy.setData({ phase: 'windup', phaseUntil: now + c.dasher.windupMs }).setAlpha(0.45);
+          enemy.body.setVelocity(0, 0);
+        } else if (phase === 'windup') {
+          enemy.setData({ phase: 'dash', phaseUntil: now + c.dasher.dashMs }).setAlpha(1);
+          enemy.body.setVelocity(toPlayer.x * c.dasher.dashSpeed, toPlayer.y * c.dasher.dashSpeed);
+        } else {
+          enemy.setData({ phase: 'drift', phaseUntil: now + c.dasher.intervalMs });
+          enemy.body.velocity.normalize().scale(c.dasher.driftSpeed);
+        }
+      }
+    }
   }
 
   // Crossing an edge that has a neighbouring map moves the player there; outer edges are walls.
@@ -161,6 +216,7 @@ class CoinDash extends Phaser.Scene {
       - Number(this.cursors.up.isDown || this.keys.W.isDown);
     const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
+    this.moveEnemies();
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
     const map = `Map ${this.mapCol + 1},${this.mapRow + 1}`;
     this.hud.setText(`Coins: ${this.score}     Best: ${this.highScore}     ${map}     Time: ${seconds}s`);

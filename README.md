@@ -1,9 +1,11 @@
 # Coin Dash — Lab 3 starter
 
 Collect coins, avoid drones, and survive a 45-second round. Move with arrow keys or WASD;
-walk off a screen edge to enter a neighbouring map (a 3x3 grid, each with its own coins and drones);
+walk off a screen edge to enter a neighbouring map (a 3x3 grid, each with its own coins and enemies);
 press P to pause or resume and R to restart. Your best score is saved in the browser
-(localStorage) and shown in the HUD. This is deliberately small so you can add features during the lab.
+(localStorage) and shown in the HUD. Enemies: red circular drones bounce around, orange square chasers
+steer toward you, and purple triangle dashers fade while winding up and then lunge at you. The centre map
+has only drones; edge maps add a chaser, and corner maps add more chasers and a dasher. This is deliberately small so you can add features during the lab.
 
 **Play it here:** https://www.avivz.net/coin-dash/
 
@@ -38,7 +40,7 @@ laptops' JSON files together and save the combined HTML. Use the same time windo
 - `.gitignore`: keeps generated reports out of Git.
 - `index.html`: page and script loading.
 - `style.css`: page appearance.
-- `settings.js`: round duration, speeds, colours, dimensions and map grid size.
+- `settings.js`: round duration, speeds, colours, dimensions, map grid size and enemies per map.
 - `game.js`: scene, input, collisions, score and end-of-round behaviour.
 - `vendor/phaser-3.90.0.min.js`: the pinned Phaser runtime, byte for byte the file published at
   `https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js`; `vendor/LICENSE.phaser.txt` is its MIT licence.
