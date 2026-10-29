@@ -5,6 +5,7 @@ class CoinDash extends Phaser.Scene {
   create() {
     const c = COIN_DASH;
     this.score = 0;
+    this.highScore = this.loadHighScore();
     this.finished = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
@@ -29,12 +30,32 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.coin, () => {
       if (this.finished) return;
       this.score++;
+      this.updateHighScore();
       this.placeCoin();
     });
     this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
+  }
+
+  loadHighScore() {
+    try {
+      const saved = Number(window.localStorage.getItem('coinDash.highScore'));
+      return Number.isSafeInteger(saved) && saved >= 0 ? saved : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  updateHighScore() {
+    if (this.score <= this.highScore) return;
+    this.highScore = this.score;
+    try {
+      window.localStorage.setItem('coinDash.highScore', String(this.highScore));
+    } catch {
+      // Keep playing with an in-memory best when browser storage is unavailable.
+    }
   }
 
   placeCoin() {
@@ -58,7 +79,7 @@ class CoinDash extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
-    this.hud.setText(`Coins: ${this.score}                       Time: ${seconds}s`);
+    this.hud.setText(`Coins: ${this.score}   Best: ${this.highScore}   Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
   }
 
@@ -69,7 +90,7 @@ class CoinDash extends Phaser.Scene {
     const c = COIN_DASH;
     this.add.rectangle(c.width / 2, c.height / 2, 460, 150, 0x0a1120, 0.95);
     this.add.text(c.width / 2, c.height / 2,
-      `${reason}\n${this.score} coins collected\nPress R to try again`,
+      `${reason}\n${this.score} coins collected · Best: ${this.highScore}\nPress R to try again`,
       { font: '24px monospace', color: '#ffffff', align: 'center', lineSpacing: 12 }
     ).setOrigin(0.5);
   }
