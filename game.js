@@ -6,6 +6,7 @@ class CoinDash extends Phaser.Scene {
     const c = COIN_DASH;
     this.score = 0;
     this.finished = false;
+    this.paused = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -34,6 +35,12 @@ class CoinDash extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
+    this.pauseKey = this.input.keyboard.addKey('P');
+    this.pauseMessage = this.add.text(c.width / 2, c.height / 2,
+      'Paused\nPress P to resume',
+      { font: '28px monospace', color: '#ffffff', align: 'center',
+        backgroundColor: '#0a1120', padding: { x: 24, y: 18 } }
+    ).setOrigin(0.5).setVisible(false);
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
   }
 
@@ -51,6 +58,8 @@ class CoinDash extends Phaser.Scene {
 
   update() {
     if (this.finished) return;
+    if (Phaser.Input.Keyboard.JustDown(this.pauseKey)) this.togglePause();
+    if (this.paused) return;
     const dx = Number(this.cursors.right.isDown || this.keys.D.isDown)
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
@@ -60,6 +69,20 @@ class CoinDash extends Phaser.Scene {
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
     this.hud.setText(`Coins: ${this.score}                       Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
+  }
+
+  togglePause() {
+    if (this.finished) return;
+    this.paused = !this.paused;
+    this.pauseMessage.setVisible(this.paused);
+    if (this.paused) {
+      this.pausedAt = this.time.now;
+      this.physics.pause();
+    } else {
+      // The scene clock keeps running so keyboard input can resume the game.
+      this.deadline += this.time.now - this.pausedAt;
+      this.physics.resume();
+    }
   }
 
   finish(reason) {
